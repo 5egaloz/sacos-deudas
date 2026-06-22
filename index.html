@@ -145,11 +145,14 @@
     <p>Venta de sacos · acceso privado</p>
     <div class="field">
       <label for="u">Usuario</label>
-      <input id="u" type="text" autocomplete="username" placeholder="usuario">
+      <input id="u" type="text" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="usuario">
     </div>
     <div class="field">
       <label for="p">Contraseña</label>
-      <input id="p" type="password" autocomplete="current-password" placeholder="••••••••">
+      <input id="p" type="password" autocomplete="current-password" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="••••••••">
+      <label style="display:flex;align-items:center;gap:8px;margin-top:8px;text-transform:none;letter-spacing:0;font-weight:500;cursor:pointer">
+        <input type="checkbox" id="verPass" style="width:auto;margin:0"> Ver contraseña
+      </label>
     </div>
     <button class="btn" type="submit">Entrar</button>
     <div class="err" id="loginErr"></div>
@@ -301,6 +304,8 @@ async function sha256(txt){
 const $ = s => document.querySelector(s);
 const loginEl = $("#login"), appEl = $("#app");
 
+$("#verPass").addEventListener("change", e=>{ $("#p").type = e.target.checked ? "text" : "password"; });
+
 /* ====================== AUTH ====================== */
 if(FIREBASE_ENABLED){
   firebase.initializeApp(FIREBASE_CONFIG);
@@ -334,7 +339,15 @@ $("#loginForm").addEventListener("submit", async e=>{
         enterApp(); toast("Sin internet: modo local");
         return;
       }
-      $("#loginErr").textContent = "Usuario o contraseña incorrectos.";
+      if(code==="auth/wrong-password" || code==="auth/invalid-credential"){
+        $("#loginErr").textContent = "Contraseña incorrecta.";
+      }else if(code==="auth/operation-not-allowed" || code==="auth/configuration-not-found"){
+        $("#loginErr").textContent = "Falta activar 'Correo/contraseña' en Firebase.";
+      }else if(code==="auth/invalid-email"){
+        $("#loginErr").textContent = "Usuario inválido.";
+      }else{
+        $("#loginErr").textContent = "Error: " + (code || err.message);
+      }
       $("#p").value = "";
     }
   }else{
