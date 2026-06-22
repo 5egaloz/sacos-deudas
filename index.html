@@ -264,12 +264,32 @@
 <input type="file" id="fileImport" accept="application/json" style="display:none">
 <div id="toast"></div>
 
+<!-- Firebase: sincronización entre dispositivos -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
 <script>
-/* ====================== CONFIG / AUTH ====================== */
+/* ====================== CONFIG ====================== */
 const USER = "5egaloz";
-// SHA-256 de la contraseña (no se guarda en texto plano)
+// SHA-256 de la contraseña (respaldo offline; no se guarda en texto plano)
 const PASS_HASH = "5e8af983dc9a58cd1929970f487d62f03d8111f565b5b0f0ef070559cc4dd2c9";
 const STORE_KEY = "sacos_deudas_v1";
+
+/* ↓↓↓  PEGA AQUÍ TU CONFIG DE FIREBASE  ↓↓↓
+   (Firebase Console → ⚙ Configuración del proyecto → Tus apps → SDK)
+   Mientras diga "PEGAR", la app funciona local (sin sincronizar).        */
+const FIREBASE_CONFIG = {
+  apiKey:      "PEGAR",
+  authDomain:  "PEGAR",
+  databaseURL: "PEGAR",
+  projectId:   "PEGAR",
+  appId:       "PEGAR"
+};
+const FIREBASE_ENABLED = FIREBASE_CONFIG.apiKey && !/PEGAR/.test(FIREBASE_CONFIG.apiKey);
+
+let cloudRef = null;     // referencia activa a la base de datos
+let cloudReady = false;  // ya recibimos datos del servidor
+let offlineMode = false; // login local sin nube (sin internet)
 
 async function sha256(txt){
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(txt));
@@ -279,23 +299,57 @@ async function sha256(txt){
 const $ = s => document.querySelector(s);
 const loginEl = $("#login"), appEl = $("#app");
 
+/* ====================== AUTH ====================== */
+if(FIREBASE_ENABLED){
+  firebase.initializeApp(FIREBASE_CONFIG);
+  // Sesión persistente: queda logueado aunque cierre el navegador
+  firebase.auth().onAuthStateChanged(user=>{
+    if(user){ connectCloud(user.uid); enterApp(); }
+  });
+}
+
 $("#loginForm").addEventListener("submit", async e=>{
   e.preventDefault();
   const u = $("#u").value.trim();
   const p = $("#p").value;
-  const h = await sha256(p);
-  if(u===USER && h===PASS_HASH){
-    sessionStorage.setItem("sacos_auth","1");
-    enterApp();
+  $("#loginErr").textContent = "";
+
+  if(FIREBASE_ENABLED){
+    const email = u + "@sacos.app";
+    try{
+      await firebase.auth().signInWithEmailAndPassword(email, p);
+      // onAuthStateChanged se encarga de entrar y conectar
+    }catch(err){
+      const code = (err && err.code) || "";
+      if(code==="auth/user-not-found" && u===USER){
+        // primera vez: crea la cuenta automáticamente
+        try{ await firebase.auth().createUserWithEmailAndPassword(email, p); return; }
+        catch(e2){ $("#loginErr").textContent = "No se pudo crear la cuenta: "+(e2.code||e2.message); return; }
+      }
+      if(code.includes("network") && u===USER && (await sha256(p))===PASS_HASH){
+        // sin internet → entra en modo local con la copia del dispositivo
+        offlineMode = true; sessionStorage.setItem("sacos_auth","1");
+        enterApp(); toast("Sin internet: modo local");
+        return;
+      }
+      $("#loginErr").textContent = "Usuario o contraseña incorrectos.";
+      $("#p").value = "";
+    }
   }else{
-    $("#loginErr").textContent = "Usuario o contraseña incorrectos.";
-    $("#p").value="";
+    // Modo local (Firebase aún no configurado)
+    if(u===USER && (await sha256(p))===PASS_HASH){
+      sessionStorage.setItem("sacos_auth","1"); enterApp();
+    }else{
+      $("#loginErr").textContent = "Usuario o contraseña incorrectos."; $("#p").value="";
+    }
   }
 });
 
 $("#btnLogout").addEventListener("click", ()=>{
   sessionStorage.removeItem("sacos_auth");
-  location.reload();
+  if(FIREBASE_ENABLED && firebase.auth().currentUser){
+    firebase.auth().signOut().finally(()=>location.reload());
+  }else location.reload();
 });
 
 function enterApp(){
@@ -303,7 +357,7 @@ function enterApp(){
   appEl.style.display="block";
   render();
 }
-if(sessionStorage.getItem("sacos_auth")==="1") enterApp();
+if(!FIREBASE_ENABLED && sessionStorage.getItem("sacos_auth")==="1") enterApp();
 
 /* ====================== DATA ====================== */
 let deudas = load();
@@ -311,7 +365,30 @@ function load(){
   try{ return JSON.parse(localStorage.getItem(STORE_KEY)) || []; }
   catch{ return []; }
 }
-function save(){ localStorage.setItem(STORE_KEY, JSON.stringify(deudas)); }
+function save(){
+  localStorage.setItem(STORE_KEY, JSON.stringify(deudas));
+  if(cloudRef){ cloudRef.set(deudas).catch(()=>toast("Guardado local (sin red)")); }
+}
+
+/* Conecta y sincroniza en tiempo real con la nube */
+function connectCloud(uid){
+  if(cloudRef) return;
+  cloudRef = firebase.database().ref("users/"+uid+"/deudas");
+  cloudRef.on("value", snap=>{
+    const data = snap.val();
+    if(data){
+      deudas = Array.isArray(data) ? data.filter(Boolean) : Object.values(data);
+      cloudReady = true;
+    }else if(!cloudReady && deudas.length){
+      // primera vez con datos locales → súbelos a la nube
+      cloudReady = true; cloudRef.set(deudas); return;
+    }else{
+      deudas = []; cloudReady = true;
+    }
+    localStorage.setItem(STORE_KEY, JSON.stringify(deudas));
+    if(appEl.style.display!=="none") render();
+  }, ()=> toast("Sin conexión a la nube"));
+}
 const uid = ()=> Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 
 /* ====================== HELPERS ====================== */
