@@ -328,10 +328,15 @@ $("#loginForm").addEventListener("submit", async e=>{
       // onAuthStateChanged se encarga de entrar y conectar
     }catch(err){
       const code = (err && err.code) || "";
-      if(code==="auth/user-not-found" && u===USER){
-        // primera vez: crea la cuenta automáticamente
+      // En las versiones nuevas de Firebase, "no existe" y "clave mala" llegan
+      // ambas como invalid-credential. Intentamos crear: si ya existe, era clave mala.
+      if((code==="auth/user-not-found" || code==="auth/invalid-credential") && u===USER){
         try{ await firebase.auth().createUserWithEmailAndPassword(email, p); return; }
-        catch(e2){ $("#loginErr").textContent = "No se pudo crear la cuenta: "+(e2.code||e2.message); return; }
+        catch(e2){
+          if(e2.code==="auth/email-already-in-use"){ $("#loginErr").textContent = "Contraseña incorrecta."; }
+          else{ $("#loginErr").textContent = "No se pudo crear la cuenta: "+(e2.code||e2.message); }
+          $("#p").value=""; return;
+        }
       }
       if(code.includes("network") && u===USER && (await sha256(p))===PASS_HASH){
         // sin internet → entra en modo local con la copia del dispositivo
