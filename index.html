@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0f172a">
+<title>Sacos · Control de Deudas</title>
+<style>
+  :root{
+    --bg:#0f172a; --bg2:#1e293b; --card:#1e293b; --card2:#273449;
+    --txt:#e2e8f0; --muted:#94a3b8; --line:#334155;
+    --brand:#f59e0b; --brand2:#fbbf24;
+    --ok:#22c55e; --warn:#f59e0b; --danger:#ef4444; --info:#38bdf8;
+    --radius:14px; --shadow:0 8px 30px rgba(0,0,0,.35);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    background:radial-gradient(1200px 600px at 80% -10%,#1e293b,transparent),var(--bg);
+    color:var(--txt);min-height:100vh}
+  button{font-family:inherit;cursor:pointer}
+  input,select,textarea{font-family:inherit}
+
+  /* ---------- LOGIN ---------- */
+  #login{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+    padding:20px;z-index:50;background:radial-gradient(900px 500px at 50% -10%,#1e293b,var(--bg))}
+  .loginbox{width:100%;max-width:380px;background:var(--card);border:1px solid var(--line);
+    border-radius:18px;padding:32px 26px;box-shadow:var(--shadow)}
+  .logo{font-size:42px;text-align:center}
+  .loginbox h1{margin:8px 0 2px;text-align:center;font-size:22px}
+  .loginbox p{margin:0 0 22px;text-align:center;color:var(--muted);font-size:13px}
+  .field{margin-bottom:14px}
+  label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;font-weight:600;
+    text-transform:uppercase;letter-spacing:.5px}
+  input,select,textarea{width:100%;padding:12px 14px;background:var(--bg);color:var(--txt);
+    border:1px solid var(--line);border-radius:10px;font-size:15px;outline:none}
+  input:focus,select:focus,textarea:focus{border-color:var(--brand)}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;
+    padding:12px 18px;border:none;border-radius:10px;font-size:15px;font-weight:700;
+    background:var(--brand);color:#1a1206;width:100%}
+  .btn:active{transform:translateY(1px)}
+  .btn.sec{background:var(--card2);color:var(--txt);border:1px solid var(--line)}
+  .btn.ghost{background:transparent;color:var(--muted);border:1px solid var(--line)}
+  .err{color:var(--danger);font-size:13px;text-align:center;margin-top:10px;min-height:18px}
+
+  /* ---------- APP ---------- */
+  #app{display:none}
+  header{position:sticky;top:0;z-index:20;background:rgba(15,23,42,.85);
+    backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+  .bar{max-width:1000px;margin:0 auto;padding:14px 16px;display:flex;align-items:center;gap:12px}
+  .bar .title{font-weight:800;font-size:18px;display:flex;align-items:center;gap:8px}
+  .bar .spacer{flex:1}
+  .iconbtn{background:var(--card2);border:1px solid var(--line);color:var(--txt);
+    border-radius:10px;padding:9px 12px;font-size:13px;font-weight:600}
+  main{max-width:1000px;margin:0 auto;padding:16px 16px 90px}
+
+  /* KPIs */
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px}
+  .kpi{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px}
+  .kpi .lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700}
+  .kpi .val{font-size:22px;font-weight:800;margin-top:6px}
+  .kpi.cobrar .val{color:var(--brand2)}
+  .kpi.vencidas .val{color:var(--danger)}
+  .kpi.porvencer .val{color:var(--warn)}
+  .kpi.clientes .val{color:var(--info)}
+
+  /* toolbar */
+  .tools{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;align-items:center}
+  .tools input[type=search]{flex:1;min-width:160px}
+  .tools select{width:auto;flex:0 0 auto}
+  .add{background:var(--brand);color:#1a1206;border:none;border-radius:10px;
+    padding:12px 16px;font-weight:700;white-space:nowrap}
+
+  /* debt cards */
+  .list{display:grid;gap:12px}
+  .deuda{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+    padding:16px;border-left:5px solid var(--line)}
+  .deuda.pendiente{border-left-color:var(--info)}
+  .deuda.porvencer{border-left-color:var(--warn)}
+  .deuda.vencida{border-left-color:var(--danger)}
+  .deuda.pagada{border-left-color:var(--ok);opacity:.72}
+  .deuda .top{display:flex;align-items:flex-start;gap:10px}
+  .deuda .nombre{font-size:17px;font-weight:800}
+  .deuda .detalle{color:var(--muted);font-size:13px;margin-top:2px}
+  .badge{font-size:11px;font-weight:800;padding:4px 9px;border-radius:999px;
+    text-transform:uppercase;letter-spacing:.4px;white-space:nowrap}
+  .badge.pendiente{background:rgba(56,189,248,.15);color:var(--info)}
+  .badge.porvencer{background:rgba(245,158,11,.15);color:var(--warn)}
+  .badge.vencida{background:rgba(239,68,68,.16);color:var(--danger)}
+  .badge.pagada{background:rgba(34,197,94,.15);color:var(--ok)}
+  .montos{display:flex;gap:18px;flex-wrap:wrap;margin:12px 0 4px}
+  .montos .m .k{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+  .montos .m .v{font-size:18px;font-weight:800}
+  .montos .saldo .v{color:var(--brand2)}
+  .progress{height:7px;background:var(--bg);border-radius:999px;overflow:hidden;margin:10px 0}
+  .progress > i{display:block;height:100%;background:var(--ok)}
+  .fechas{display:flex;gap:16px;flex-wrap:wrap;font-size:12.5px;color:var(--muted);margin-top:8px}
+  .fechas b{color:var(--txt);font-weight:700}
+  .acciones{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+  .acciones button{flex:0 0 auto;font-size:13px;padding:9px 12px;border-radius:9px;
+    border:1px solid var(--line);background:var(--card2);color:var(--txt);font-weight:600}
+  .acciones .wa{background:#25D366;color:#06351c;border-color:transparent}
+  .acciones .pay{background:var(--ok);color:#062a13;border-color:transparent}
+  .acciones .danger{color:var(--danger)}
+  .abonos{margin-top:10px;font-size:12.5px;color:var(--muted);border-top:1px dashed var(--line);padding-top:8px}
+  .abonos .ab{display:flex;justify-content:space-between;padding:2px 0}
+
+  .empty{text-align:center;color:var(--muted);padding:50px 20px}
+  .empty .big{font-size:46px}
+
+  /* modal */
+  .modal{position:fixed;inset:0;z-index:60;display:none;align-items:flex-end;justify-content:center;
+    background:rgba(0,0,0,.6);padding:0}
+  .modal.show{display:flex}
+  .sheet{background:var(--card);width:100%;max-width:520px;border-radius:18px 18px 0 0;
+    border:1px solid var(--line);padding:20px 18px calc(20px + env(safe-area-inset-bottom));
+    max-height:92vh;overflow:auto;box-shadow:var(--shadow)}
+  .sheet h2{margin:0 0 16px;font-size:19px}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .modal-actions{display:flex;gap:10px;margin-top:18px}
+  .modal-actions .btn{flex:1}
+  .hint{font-size:12px;color:var(--muted);margin-top:-6px;margin-bottom:12px}
+
+  /* toast */
+  #toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);
+    background:var(--card2);border:1px solid var(--line);color:var(--txt);padding:12px 18px;
+    border-radius:12px;font-weight:600;font-size:14px;opacity:0;pointer-events:none;
+    transition:.25s;z-index:80;box-shadow:var(--shadow)}
+  #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  @media(max-width:600px){
+    .kpis{grid-template-columns:repeat(2,1fr)}
+    .kpi .val{font-size:19px}
+    .sheet{border-radius:16px;margin:0;align-self:flex-end}
+  }
+  @media(min-width:620px){.modal{align-items:center}.sheet{border-radius:18px}}
+</style>
+</head>
+<body>
+
+<!-- ============ LOGIN ============ -->
+<div id="login">
+  <form class="loginbox" id="loginForm" autocomplete="on">
+    <div class="logo">🧺</div>
+    <h1>Control de Deudas</h1>
+    <p>Venta de sacos · acceso privado</p>
+    <div class="field">
+      <label for="u">Usuario</label>
+      <input id="u" type="text" autocomplete="username" placeholder="usuario">
+    </div>
+    <div class="field">
+      <label for="p">Contraseña</label>
+      <input id="p" type="password" autocomplete="current-password" placeholder="••••••••">
+    </div>
+    <button class="btn" type="submit">Entrar</button>
+    <div class="err" id="loginErr"></div>
+  </form>
+</div>
+
+<!-- ============ APP ============ -->
+<div id="app">
+  <header>
+    <div class="bar">
+      <div class="title">🧺 Sacos · Deudas</div>
+      <div class="spacer"></div>
+      <button class="iconbtn" id="btnBackup" title="Respaldar / restaurar">⤓ Respaldo</button>
+      <button class="iconbtn" id="btnLogout" title="Cerrar sesión">Salir</button>
+    </div>
+  </header>
+
+  <main>
+    <div class="kpis">
+      <div class="kpi cobrar"><div class="lbl">Por cobrar</div><div class="val" id="kCobrar">$0</div></div>
+      <div class="kpi clientes"><div class="lbl">Me deben</div><div class="val" id="kClientes">0</div></div>
+      <div class="kpi porvencer"><div class="lbl">Por vencer (7d)</div><div class="val" id="kPorvencer">0</div></div>
+      <div class="kpi vencidas"><div class="lbl">Vencidas</div><div class="val" id="kVencidas">0</div></div>
+    </div>
+
+    <div class="tools">
+      <input type="search" id="buscar" placeholder="🔍 Buscar cliente o detalle…">
+      <select id="filtro">
+        <option value="activas">Activas (con saldo)</option>
+        <option value="todas">Todas</option>
+        <option value="vencida">Vencidas</option>
+        <option value="porvencer">Por vencer</option>
+        <option value="pendiente">Al día</option>
+        <option value="pagada">Pagadas</option>
+      </select>
+      <select id="orden">
+        <option value="venc">Orden: vencimiento</option>
+        <option value="saldo">Orden: mayor saldo</option>
+        <option value="nombre">Orden: nombre</option>
+        <option value="ingreso">Orden: más reciente</option>
+      </select>
+      <button class="add" id="btnNueva">+ Nueva deuda</button>
+    </div>
+
+    <div class="list" id="lista"></div>
+  </main>
+</div>
+
+<!-- ============ MODAL DEUDA ============ -->
+<div class="modal" id="modal">
+  <form class="sheet" id="formDeuda">
+    <h2 id="modalTitle">Nueva deuda</h2>
+    <input type="hidden" id="fId">
+    <div class="field">
+      <label for="fNombre">Cliente *</label>
+      <input id="fNombre" type="text" placeholder="Nombre del cliente" required>
+    </div>
+    <div class="field">
+      <label for="fTel">Teléfono (para cobrar por WhatsApp)</label>
+      <input id="fTel" type="tel" inputmode="tel" placeholder="+56 9 1234 5678">
+    </div>
+    <div class="field">
+      <label for="fDetalle">¿Qué te debe?</label>
+      <input id="fDetalle" type="text" placeholder="Ej: 10 sacos de cemento">
+    </div>
+    <div class="field">
+      <label for="fMonto">Monto de la deuda *</label>
+      <input id="fMonto" type="number" inputmode="numeric" min="0" step="1" placeholder="0" required>
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label for="fIngreso">Fecha de ingreso *</label>
+        <input id="fIngreso" type="date" required>
+      </div>
+      <div class="field">
+        <label for="fVence">Debe pagar antes de *</label>
+        <input id="fVence" type="date" required>
+      </div>
+    </div>
+    <div class="field">
+      <label for="fNotas">Notas</label>
+      <textarea id="fNotas" rows="2" placeholder="Observaciones…"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn ghost" id="btnCancelar">Cancelar</button>
+      <button type="submit" class="btn">Guardar</button>
+    </div>
+  </form>
+</div>
+
+<!-- ============ MODAL ABONO ============ -->
+<div class="modal" id="modalAbono">
+  <form class="sheet" id="formAbono" style="max-width:420px">
+    <h2>Registrar abono</h2>
+    <input type="hidden" id="abId">
+    <p class="hint" id="abInfo"></p>
+    <div class="field">
+      <label for="abMonto">Monto del abono *</label>
+      <input id="abMonto" type="number" inputmode="numeric" min="1" step="1" placeholder="0" required>
+    </div>
+    <div class="field">
+      <label for="abFecha">Fecha del abono</label>
+      <input id="abFecha" type="date">
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn ghost" id="abCancelar">Cancelar</button>
+      <button type="submit" class="btn pay" style="color:#062a13">Abonar</button>
+    </div>
+  </form>
+</div>
+
+<input type="file" id="fileImport" accept="application/json" style="display:none">
+<div id="toast"></div>
+
+<script>
+/* ====================== CONFIG / AUTH ====================== */
+const USER = "5egaloz";
+// SHA-256 de la contraseña (no se guarda en texto plano)
+const PASS_HASH = "5e8af983dc9a58cd1929970f487d62f03d8111f565b5b0f0ef070559cc4dd2c9";
+const STORE_KEY = "sacos_deudas_v1";
+
+async function sha256(txt){
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(txt));
+  return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,"0")).join("");
+}
+
+const $ = s => document.querySelector(s);
+const loginEl = $("#login"), appEl = $("#app");
+
+$("#loginForm").addEventListener("submit", async e=>{
+  e.preventDefault();
+  const u = $("#u").value.trim();
+  const p = $("#p").value;
+  const h = await sha256(p);
+  if(u===USER && h===PASS_HASH){
+    sessionStorage.setItem("sacos_auth","1");
+    enterApp();
+  }else{
+    $("#loginErr").textContent = "Usuario o contraseña incorrectos.";
+    $("#p").value="";
+  }
+});
+
+$("#btnLogout").addEventListener("click", ()=>{
+  sessionStorage.removeItem("sacos_auth");
+  location.reload();
+});
+
+function enterApp(){
+  loginEl.style.display="none";
+  appEl.style.display="block";
+  render();
+}
+if(sessionStorage.getItem("sacos_auth")==="1") enterApp();
+
+/* ====================== DATA ====================== */
+let deudas = load();
+function load(){
+  try{ return JSON.parse(localStorage.getItem(STORE_KEY)) || []; }
+  catch{ return []; }
+}
+function save(){ localStorage.setItem(STORE_KEY, JSON.stringify(deudas)); }
+const uid = ()=> Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+
+/* ====================== HELPERS ====================== */
+const fmt = n => "$"+ (Math.round(n)||0).toLocaleString("es-CL");
+const hoy = ()=> new Date(new Date().toDateString());
+function parseFecha(s){ if(!s) return null; const d=new Date(s+"T00:00:00"); return isNaN(d)?null:d; }
+function fechaTxt(s){
+  const d = parseFecha(s); if(!d) return "—";
+  return d.toLocaleDateString("es-CL",{day:"2-digit",month:"short",year:"numeric"});
+}
+const dias = (a,b)=> Math.round((a-b)/86400000);
+const abonado = d => (d.abonos||[]).reduce((s,a)=>s+(+a.monto||0),0);
+const saldo = d => Math.max(0,(+d.monto||0) - abonado(d));
+
+function estado(d){
+  if(saldo(d)<=0) return "pagada";
+  const v = parseFecha(d.vence);
+  if(!v) return "pendiente";
+  const diff = dias(v, hoy());
+  if(diff < 0) return "vencida";
+  if(diff <= 7) return "porvencer";
+  return "pendiente";
+}
+const estadoTxt = {pendiente:"Al día", porvencer:"Por vencer", vencida:"Vencida", pagada:"Pagada"};
+
+function toast(msg){
+  const t=$("#toast"); t.textContent=msg; t.classList.add("show");
+  clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove("show"),2200);
+}
+
+/* ====================== RENDER ====================== */
+function render(){
+  // KPIs
+  const activas = deudas.filter(d=>saldo(d)>0);
+  $("#kCobrar").textContent = fmt(activas.reduce((s,d)=>s+saldo(d),0));
+  $("#kClientes").textContent = new Set(activas.map(d=>(d.nombre||"").toLowerCase())).size;
+  $("#kVencidas").textContent = deudas.filter(d=>estado(d)==="vencida").length;
+  $("#kPorvencer").textContent = deudas.filter(d=>estado(d)==="porvencer").length;
+
+  // filtro + búsqueda + orden
+  const q = $("#buscar").value.trim().toLowerCase();
+  const f = $("#filtro").value;
+  let arr = deudas.filter(d=>{
+    const st = estado(d);
+    if(f==="activas" && st==="pagada") return false;
+    if(["vencida","porvencer","pendiente","pagada"].includes(f) && st!==f) return false;
+    if(q && !((d.nombre||"")+" "+(d.detalle||"")).toLowerCase().includes(q)) return false;
+    return true;
+  });
+
+  const ord = $("#orden").value;
+  const rank = {vencida:0,porvencer:1,pendiente:2,pagada:3};
+  arr.sort((a,b)=>{
+    if(ord==="saldo") return saldo(b)-saldo(a);
+    if(ord==="nombre") return (a.nombre||"").localeCompare(b.nombre||"");
+    if(ord==="ingreso") return (b.ingreso||"").localeCompare(a.ingreso||"");
+    // venc: por estado y luego por fecha de vencimiento más próxima
+    if(rank[estado(a)]!==rank[estado(b)]) return rank[estado(a)]-rank[estado(b)];
+    return (a.vence||"9999").localeCompare(b.vence||"9999");
+  });
+
+  const lista = $("#lista");
+  if(arr.length===0){
+    lista.innerHTML = `<div class="empty"><div class="big">🧾</div>
+      <p>${deudas.length===0?"Aún no registras deudas.<br>Toca <b>+ Nueva deuda</b> para empezar.":"Sin resultados para este filtro."}</p></div>`;
+    return;
+  }
+
+  lista.innerHTML = arr.map(d=>{
+    const st = estado(d), sal = saldo(d), ab = abonado(d), tot = +d.monto||0;
+    const pct = tot>0 ? Math.min(100, Math.round(ab/tot*100)) : 0;
+    const v = parseFecha(d.vence);
+    let vencInfo="";
+    if(st==="vencida") vencInfo = `<b style="color:var(--danger)">vencida hace ${Math.abs(dias(v,hoy()))} días</b>`;
+    else if(st==="porvencer") vencInfo = `<b style="color:var(--warn)">en ${dias(v,hoy())} días</b>`;
+    else if(st==="pagada") vencInfo = `<b style="color:var(--ok)">✓ pagada</b>`;
+    else if(v) vencInfo = `en ${dias(v,hoy())} días`;
+
+    const abList = (d.abonos||[]).length
+      ? `<div class="abonos">${d.abonos.map((a,i)=>
+          `<div class="ab"><span>Abono ${fechaTxt(a.fecha)}</span><span>${fmt(a.monto)}
+           <button onclick="delAbono('${d.id}',${i})" style="background:none;border:none;color:var(--danger);font-size:13px;cursor:pointer">✕</button></span></div>`
+        ).join("")}</div>` : "";
+
+    const wa = d.tel ? `<button class="wa" onclick="cobrarWA('${d.id}')">💬 Cobrar</button>` : "";
+
+    return `<div class="deuda ${st}">
+      <div class="top">
+        <div style="flex:1">
+          <div class="nombre">${esc(d.nombre)}</div>
+          ${d.detalle?`<div class="detalle">${esc(d.detalle)}</div>`:""}
+        </div>
+        <span class="badge ${st}">${estadoTxt[st]}</span>
+      </div>
+      <div class="montos">
+        <div class="m saldo"><div class="k">Saldo</div><div class="v">${fmt(sal)}</div></div>
+        <div class="m"><div class="k">Total</div><div class="v" style="font-size:14px;color:var(--muted)">${fmt(tot)}</div></div>
+        ${ab>0?`<div class="m"><div class="k">Abonado</div><div class="v" style="font-size:14px;color:var(--ok)">${fmt(ab)}</div></div>`:""}
+      </div>
+      ${ab>0?`<div class="progress"><i style="width:${pct}%"></i></div>`:""}
+      <div class="fechas">
+        <span>📥 Ingreso: <b>${fechaTxt(d.ingreso)}</b></span>
+        <span>📅 Vence: <b>${fechaTxt(d.vence)}</b> ${vencInfo}</span>
+      </div>
+      ${d.notas?`<div class="detalle" style="margin-top:8px">📝 ${esc(d.notas)}</div>`:""}
+      ${abList}
+      <div class="acciones">
+        ${sal>0?`<button class="pay" onclick="abrirAbono('${d.id}')">＋ Abono</button>`:""}
+        ${sal>0&&wa?wa:""}
+        <button onclick="editar('${d.id}')">✎ Editar</button>
+        <button class="danger" onclick="borrar('${d.id}')">🗑 Borrar</button>
+      </div>
+    </div>`;
+  }).join("");
+}
+function esc(s){ return (s||"").replace(/[<>&]/g, c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])); }
+
+$("#buscar").addEventListener("input", render);
+$("#filtro").addEventListener("change", render);
+$("#orden").addEventListener("change", render);
+
+/* ====================== MODAL DEUDA ====================== */
+const modal = $("#modal");
+function openModal(){ modal.classList.add("show"); }
+function closeModal(){ modal.classList.remove("show"); }
+
+$("#btnNueva").addEventListener("click", ()=>{
+  $("#formDeuda").reset();
+  $("#fId").value="";
+  $("#modalTitle").textContent="Nueva deuda";
+  const t = new Date().toISOString().slice(0,10);
+  $("#fIngreso").value = t;
+  const v = new Date(); v.setDate(v.getDate()+30);
+  $("#fVence").value = v.toISOString().slice(0,10);
+  openModal(); setTimeout(()=>$("#fNombre").focus(),50);
+});
+$("#btnCancelar").addEventListener("click", closeModal);
+modal.addEventListener("click", e=>{ if(e.target===modal) closeModal(); });
+
+function editar(id){
+  const d = deudas.find(x=>x.id===id); if(!d) return;
+  $("#fId").value=d.id;
+  $("#modalTitle").textContent="Editar deuda";
+  $("#fNombre").value=d.nombre||"";
+  $("#fTel").value=d.tel||"";
+  $("#fDetalle").value=d.detalle||"";
+  $("#fMonto").value=d.monto||"";
+  $("#fIngreso").value=d.ingreso||"";
+  $("#fVence").value=d.vence||"";
+  $("#fNotas").value=d.notas||"";
+  openModal();
+}
+
+$("#formDeuda").addEventListener("submit", e=>{
+  e.preventDefault();
+  const id = $("#fId").value;
+  const data = {
+    nombre:$("#fNombre").value.trim(),
+    tel:$("#fTel").value.trim(),
+    detalle:$("#fDetalle").value.trim(),
+    monto:+$("#fMonto").value||0,
+    ingreso:$("#fIngreso").value,
+    vence:$("#fVence").value,
+    notas:$("#fNotas").value.trim(),
+  };
+  if(id){
+    const d = deudas.find(x=>x.id===id);
+    Object.assign(d, data);
+    toast("Deuda actualizada");
+  }else{
+    deudas.push({id:uid(), ...data, abonos:[]});
+    toast("Deuda registrada");
+  }
+  save(); render(); closeModal();
+});
+
+function borrar(id){
+  const d = deudas.find(x=>x.id===id);
+  if(!confirm(`¿Borrar la deuda de ${d?.nombre||"este cliente"}? Esta acción no se puede deshacer.`)) return;
+  deudas = deudas.filter(x=>x.id!==id);
+  save(); render(); toast("Deuda eliminada");
+}
+
+/* ====================== ABONOS ====================== */
+const modalAb = $("#modalAbono");
+function abrirAbono(id){
+  const d = deudas.find(x=>x.id===id); if(!d) return;
+  $("#abId").value=id;
+  $("#abMonto").value="";
+  $("#abMonto").max = saldo(d);
+  $("#abFecha").value = new Date().toISOString().slice(0,10);
+  $("#abInfo").textContent = `${d.nombre} · saldo actual: ${fmt(saldo(d))}`;
+  modalAb.classList.add("show"); setTimeout(()=>$("#abMonto").focus(),50);
+}
+$("#abCancelar").addEventListener("click", ()=>modalAb.classList.remove("show"));
+modalAb.addEventListener("click", e=>{ if(e.target===modalAb) modalAb.classList.remove("show"); });
+
+$("#formAbono").addEventListener("submit", e=>{
+  e.preventDefault();
+  const d = deudas.find(x=>x.id===$("#abId").value); if(!d) return;
+  const monto = +$("#abMonto").value||0;
+  if(monto<=0) return;
+  d.abonos = d.abonos||[];
+  d.abonos.push({monto, fecha:$("#abFecha").value || new Date().toISOString().slice(0,10)});
+  save(); render(); modalAb.classList.remove("show");
+  toast(saldo(d)<=0 ? "🎉 Deuda saldada" : "Abono registrado");
+});
+function delAbono(id,i){
+  const d = deudas.find(x=>x.id===id); if(!d) return;
+  if(!confirm("¿Eliminar este abono?")) return;
+  d.abonos.splice(i,1); save(); render(); toast("Abono eliminado");
+}
+
+/* ====================== WHATSAPP ====================== */
+function cobrarWA(id){
+  const d = deudas.find(x=>x.id===id); if(!d) return;
+  const tel = (d.tel||"").replace(/[^0-9]/g,"");
+  const msg = `Hola ${d.nombre}, te recuerdo el saldo pendiente de ${fmt(saldo(d))}`+
+    (d.detalle?` por ${d.detalle}`:"")+
+    (d.vence?` con vencimiento el ${fechaTxt(d.vence)}`:"")+`. ¡Gracias! 🙌`;
+  window.open(`https://wa.me/${tel}?text=${encodeURIComponent(msg)}`,"_blank");
+}
+
+/* ====================== BACKUP ====================== */
+$("#btnBackup").addEventListener("click", ()=>{
+  const opt = prompt("Respaldo de datos:\n\n1 = Descargar respaldo (.json)\n2 = Restaurar desde archivo\n\nEscribe 1 o 2:");
+  if(opt==="1"){
+    const blob = new Blob([JSON.stringify(deudas,null,2)],{type:"application/json"});
+    const a=document.createElement("a");
+    a.href=URL.createObjectURL(blob);
+    a.download=`sacos-deudas-${new Date().toISOString().slice(0,10)}.json`;
+    a.click(); toast("Respaldo descargado");
+  }else if(opt==="2"){
+    $("#fileImport").click();
+  }
+});
+$("#fileImport").addEventListener("change", e=>{
+  const file=e.target.files[0]; if(!file) return;
+  const r=new FileReader();
+  r.onload=()=>{
+    try{
+      const data=JSON.parse(r.result);
+      if(!Array.isArray(data)) throw 0;
+      if(!confirm(`El respaldo tiene ${data.length} deudas. ¿Reemplazar los datos actuales?`)) return;
+      deudas=data.map(d=>({abonos:[],...d}));
+      save(); render(); toast("Datos restaurados");
+    }catch{ alert("Archivo inválido."); }
+  };
+  r.readAsText(file);
+  e.target.value="";
+});
+</script>
+</body>
+</html>
