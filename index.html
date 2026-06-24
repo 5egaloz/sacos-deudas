@@ -54,11 +54,12 @@
   main{max-width:1000px;margin:0 auto;padding:16px 16px 90px}
 
   /* KPIs */
-  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:18px}
   .kpi{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px}
   .kpi .lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700}
   .kpi .val{font-size:22px;font-weight:800;margin-top:6px}
   .kpi.cobrar .val{color:var(--brand2)}
+  .kpi.cobrado .val{color:var(--ok)}
   .kpi.vencidas .val{color:var(--danger)}
   .kpi.porvencer .val{color:var(--warn)}
   .kpi.clientes .val{color:var(--info)}
@@ -155,7 +156,9 @@
       </label>
     </div>
     <button class="btn" type="submit">Entrar</button>
+    <button class="btn" type="button" id="btnRegister" style="margin-top:10px;background:transparent;border:1px solid var(--line);color:var(--text)">Crear cuenta nueva</button>
     <div class="err" id="loginErr"></div>
+    <p id="loginHint" style="margin:12px 0 0;text-align:center;color:var(--muted);font-size:12px">¿Primera vez? Escribe un usuario y una contraseña (mín. 6 caracteres) y toca «Crear cuenta nueva».</p>
   </form>
 </div>
 
@@ -173,6 +176,7 @@
   <main>
     <div class="kpis">
       <div class="kpi cobrar"><div class="lbl">Por cobrar</div><div class="val" id="kCobrar">$0</div></div>
+      <div class="kpi cobrado"><div class="lbl">Cobrado (total)</div><div class="val" id="kCobrado">$0</div></div>
       <div class="kpi clientes"><div class="lbl">Me deben</div><div class="val" id="kClientes">0</div></div>
       <div class="kpi porvencer"><div class="lbl">Por vencer (7d)</div><div class="val" id="kPorvencer">0</div></div>
       <div class="kpi vencidas"><div class="lbl">Vencidas</div><div class="val" id="kVencidas">0</div></div>
@@ -330,14 +334,7 @@ $("#loginForm").addEventListener("submit", async e=>{
       const code = (err && err.code) || "";
       // En las versiones nuevas de Firebase, "no existe" y "clave mala" llegan
       // ambas como invalid-credential. Intentamos crear: si ya existe, era clave mala.
-      if((code==="auth/user-not-found" || code==="auth/invalid-credential") && u===USER){
-        try{ await firebase.auth().createUserWithEmailAndPassword(email, p); return; }
-        catch(e2){
-          if(e2.code==="auth/email-already-in-use"){ $("#loginErr").textContent = "Contraseña incorrecta."; }
-          else{ $("#loginErr").textContent = "No se pudo crear la cuenta: "+(e2.code||e2.message); }
-          $("#p").value=""; return;
-        }
-      }
+      // El registro de cuentas nuevas se hace con el botón «Crear cuenta nueva».
       if(code.includes("network") && u===USER && (await sha256(p))===PASS_HASH){
         // sin internet → entra en modo local con la copia del dispositivo
         offlineMode = true; sessionStorage.setItem("sacos_auth","1");
@@ -345,7 +342,7 @@ $("#loginForm").addEventListener("submit", async e=>{
         return;
       }
       if(code==="auth/wrong-password" || code==="auth/invalid-credential"){
-        $("#loginErr").textContent = "Contraseña incorrecta.";
+        $("#loginErr").textContent = "Usuario o contraseña incorrectos. ¿Primera vez? Toca «Crear cuenta nueva».";
       }else if(code==="auth/operation-not-allowed" || code==="auth/configuration-not-found"){
         $("#loginErr").textContent = "Falta activar 'Correo/contraseña' en Firebase.";
       }else if(code==="auth/invalid-email"){
@@ -365,8 +362,31 @@ $("#loginForm").addEventListener("submit", async e=>{
   }
 });
 
+/* Registro: cada cliente crea su propia cuenta y su propia base de datos */
+$("#btnRegister").addEventListener("click", async ()=>{
+  const u = $("#u").value.trim().toLowerCase();
+  const p = $("#p").value;
+  $("#loginErr").textContent = "";
+  if(!/^[a-z0-9._-]{3,}$/.test(u)){ $("#loginErr").textContent = "Usuario: mín. 3 caracteres, sin espacios (letras, números, . _ -)."; return; }
+  if(p.length < 6){ $("#loginErr").textContent = "La contraseña debe tener al menos 6 caracteres."; return; }
+  if(!FIREBASE_ENABLED){ $("#loginErr").textContent = "El registro necesita conexión a internet."; return; }
+  // base limpia: la cuenta nueva no debe heredar datos locales de otra sesión
+  deudas = []; localStorage.removeItem(STORE_KEY);
+  try{
+    await firebase.auth().createUserWithEmailAndPassword(u+"@sacos.app", p);
+    // onAuthStateChanged entra y conecta su propia base en users/<uid>
+  }catch(e){
+    const c = (e&&e.code)||"";
+    if(c==="auth/email-already-in-use") $("#loginErr").textContent = "Ese usuario ya existe. Usa «Entrar».";
+    else if(c==="auth/weak-password") $("#loginErr").textContent = "Contraseña muy débil (mínimo 6).";
+    else if(c==="auth/operation-not-allowed") $("#loginErr").textContent = "Falta activar «Correo/contraseña» en Firebase.";
+    else $("#loginErr").textContent = "No se pudo crear la cuenta: " + (c || e.message);
+  }
+});
+
 $("#btnLogout").addEventListener("click", ()=>{
   sessionStorage.removeItem("sacos_auth");
+  localStorage.removeItem(STORE_KEY);
   if(FIREBASE_ENABLED && firebase.auth().currentUser){
     firebase.auth().signOut().finally(()=>location.reload());
   }else location.reload();
