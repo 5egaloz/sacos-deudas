@@ -277,10 +277,10 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
 <script>
 /* ====================== CONFIG ====================== */
-const USER = "5egaloz";
-// SHA-256 de la contraseña (respaldo offline; no se guarda en texto plano)
-const PASS_HASH = "5e8af983dc9a58cd1929970f487d62f03d8111f565b5b0f0ef070559cc4dd2c9";
 const STORE_KEY = "sacos_deudas_v1";
+// Respaldo para entrar sin internet. Se guarda en ESTE dispositivo la primera vez
+// que entras con conexión; nunca viaja en el código fuente.
+const OFFLINE_KEY = "sacos_offline_v1";
 
 /* ↓↓↓  PEGA AQUÍ TU CONFIG DE FIREBASE  ↓↓↓
    (Firebase Console → ⚙ Configuración del proyecto → Tus apps → SDK)
@@ -300,9 +300,29 @@ let cloudRef = null;     // referencia activa a la base de datos
 let cloudReady = false;  // ya recibimos datos del servidor
 let offlineMode = false; // login local sin nube (sin internet)
 
-async function sha256(txt){
-  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(txt));
-  return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,"0")).join("");
+/* Respaldo offline: PBKDF2 con sal aleatoria por dispositivo.
+   Un SHA-256 pelado se rompe con tabla arcoíris en segundos; esto no. */
+const hex = b => [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("");
+
+async function derivar(pass, salHex){
+  const sal = new Uint8Array(salHex.match(/../g).map(h=>parseInt(h,16)));
+  const base = await crypto.subtle.importKey(
+    "raw", new TextEncoder().encode(pass), "PBKDF2", false, ["deriveBits"]);
+  const bits = await crypto.subtle.deriveBits(
+    {name:"PBKDF2", salt:sal, iterations:210000, hash:"SHA-256"}, base, 256);
+  return hex(bits);
+}
+
+async function guardarRespaldo(u, p){
+  const salHex = hex(crypto.getRandomValues(new Uint8Array(16)));
+  localStorage.setItem(OFFLINE_KEY, JSON.stringify(
+    {usuario:u, sal:salHex, hash:await derivar(p, salHex)}));
+}
+
+async function respaldoValido(u, p){
+  let r; try{ r = JSON.parse(localStorage.getItem(OFFLINE_KEY)); }catch{ return false; }
+  if(!r || r.usuario !== u) return false;
+  return (await derivar(p, r.sal)) === r.hash;
 }
 
 const $ = s => document.querySelector(s);
@@ -329,13 +349,14 @@ $("#loginForm").addEventListener("submit", async e=>{
     const email = u + "@sacos.app";
     try{
       await firebase.auth().signInWithEmailAndPassword(email, p);
+      await guardarRespaldo(u, p);   // deja el respaldo offline en este dispositivo
       // onAuthStateChanged se encarga de entrar y conectar
     }catch(err){
       const code = (err && err.code) || "";
       // En las versiones nuevas de Firebase, "no existe" y "clave mala" llegan
       // ambas como invalid-credential. Intentamos crear: si ya existe, era clave mala.
       // El registro de cuentas nuevas se hace con el botón «Crear cuenta nueva».
-      if(code.includes("network") && u===USER && (await sha256(p))===PASS_HASH){
+      if(code.includes("network") && await respaldoValido(u, p)){
         // sin internet → entra en modo local con la copia del dispositivo
         offlineMode = true; sessionStorage.setItem("sacos_auth","1");
         enterApp(); toast("Sin internet: modo local");
@@ -353,8 +374,8 @@ $("#loginForm").addEventListener("submit", async e=>{
       $("#p").value = "";
     }
   }else{
-    // Modo local (Firebase aún no configurado)
-    if(u===USER && (await sha256(p))===PASS_HASH){
+    // Modo local (Firebase aún no configurado): solo sirve el respaldo del dispositivo
+    if(await respaldoValido(u, p)){
       sessionStorage.setItem("sacos_auth","1"); enterApp();
     }else{
       $("#loginErr").textContent = "Usuario o contraseña incorrectos."; $("#p").value="";
@@ -374,6 +395,7 @@ $("#btnRegister").addEventListener("click", async ()=>{
   deudas = []; localStorage.removeItem(STORE_KEY);
   try{
     await firebase.auth().createUserWithEmailAndPassword(u+"@sacos.app", p);
+    await guardarRespaldo(u, p);
     // onAuthStateChanged entra y conecta su propia base en users/<uid>
   }catch(e){
     const c = (e&&e.code)||"";
@@ -387,6 +409,7 @@ $("#btnRegister").addEventListener("click", async ()=>{
 $("#btnLogout").addEventListener("click", ()=>{
   sessionStorage.removeItem("sacos_auth");
   localStorage.removeItem(STORE_KEY);
+  localStorage.removeItem(OFFLINE_KEY);
   if(FIREBASE_ENABLED && firebase.auth().currentUser){
     firebase.auth().signOut().finally(()=>location.reload());
   }else location.reload();
